@@ -1,0 +1,299 @@
+
+[
+  {
+    "id": "vama-sundari-park",
+    "name": "Vama Sundari Park",
+    "category": "Park",
+    "description": "Campus park and outdoor space.",
+    "latitude": 12.752819986380409,
+    "longitude": 80.19645704225618
+  },
+  {
+    "id": "ashwins-students-needs-store",
+    "name": "Ashwins Students Needs Store",
+    "category": "Shop",
+    "description": "Store serving student needs.",
+    "latitude": 12.753470253110565,
+    "longitude": 80.19669978905897
+  },
+  {
+    "id": "ssn-school-of-management",
+    "name": "SSN School of Management",
+    "category": "Academic",
+    "description": "School of Management.",
+    "latitude": 12.753050613642527,
+    "longitude": 80.1990201824623
+  },
+  {
+    "id": "staff-quarters",
+    "name": "Staff Quarters",
+    "category": "Residential",
+    "description": "Staff residential quarters.",
+    "latitude": 12.754546608051045,
+    "longitude": 80.20188230904729
+  },
+  {
+    "id": "sports-complex",
+    "name": "Sports Complex",
+    "category": "Sports",
+    "description": "Campus sports facilities.",
+    "latitude": 12.753256858650769,
+    "longitude": 80.19464875258149
+  },
+  {
+    "id": "ssn-tennis-court",
+    "name": "SSN Tennis Court",
+    "category": "Sports",
+    "description": "Tennis court.",
+    "latitude": 12.753118803813694,
+    "longitude": 80.19352794115959
+  },
+  {
+    "id": "mini-auditorium",
+    "name": "Mini Auditorium",
+    "category": "Auditorium",
+    "description": "Mini auditorium for events.",
+    "latitude": 12.750793908059775,
+    "longitude": 80.19372508710713
+  },
+  {
+    "id": "rishabs-food-court",
+    "name": "Rishabs Food Court",
+    "category": "Food",
+    "description": "Food court.",
+    "latitude": 12.751398132014431,
+    "longitude": 80.19507641831076
+  },
+  {
+    "id": "metro-cafe",
+    "name": "Metro Cafe",
+    "category": "Food",
+    "description": "Cafe.",
+    "latitude": 12.75111375884505,
+    "longitude": 80.19512997438984
+  },
+  {
+    "id": "snuc-football-field",
+    "name": "SNUC Football Field",
+    "category": "Sports",
+    "description": "Football field.",
+    "latitude": 12.752764883013539,
+    "longitude": 80.19119063422619
+  },
+  {
+    "id": "snuc-cricket-field",
+    "name": "SNUC Cricket Field",
+    "category": "Sports",
+    "description": "Cricket field.",
+    "latitude": 12.752254316154135,
+    "longitude": 80.18975606000828
+  },
+  {
+    "id": "snuc-school-of-law",
+    "name": "SNUC School of Law",
+    "category": "Academic",
+    "description": "School of Law.",
+    "latitude": 12.753287850939993,
+    "longitude": 80.1978963432175
+  },
+  {
+    "id": "ssn-ifound",
+    "name": "SSN iFound - SSN Incubation Foundation",
+    "category": "Research",
+    "description": "SSN Incubation Foundation.",
+    "latitude": 12.752898462290295,
+    "longitude": 80.20225201563099
+  },
+  {
+    "id": "ssn-college-open-air-theatre",
+    "name": "SSN College Open Air Theatre",
+    "category": "Auditorium",
+    "description": "Open-air theatre.",
+    "latitude": 12.751380571970516,
+    "longitude": 80.19799581139216
+  },
+  {
+    "id": "main-canteen",
+    "name": "Main Canteen",
+    "category": "Food",
+    "description": "Main campus canteen.",
+    "latitude": 12.753336152042454,
+    "longitude": 80.19478587766463
+  },
+  {
+    "id": "new-staff-quarters",
+    "name": "New Staff Quarters",
+    "category": "Residential",
+    "description": "New staff residential quarters.",
+    "latitude": 12.754447133419482,
+    "longitude": 80.19969467326962
+  },
+  {
+    "id": "department-of-computer-science-engineering",
+    "name": "Department of Computer Science Engineering",
+    "category": "Academic",
+    "description": "Computer Science Engineering department.",
+    "latitude": 12.751693955562246,
+    "longitude": 80.19727717640544
+  },
+  {
+    "id": "administration-block-ssn",
+    "name": "Administration Block SSN",
+    "category": "Administration",
+    "description": "Campus administration block.",
+    "latitude": 12.751738987152608,
+    "longitude": 80.19532711617622
+  },
+  {
+    "id": "mechanical-block",
+    "name": "Mechanical Block",
+    "category": "Academic",
+    "description": "Mechanical Engineering block.",
+    "latitude": 12.75191129879325,
+    "longitude": 80.19449323784448
+  },
+  {
+    "id": "cs-block",
+    "name": "CS Block",
+    "category": "Academic",
+    "description": "Computer Science block.",
+    "latitude": 12.751464201218791,
+    "longitude": 80.19630572044014
+  },
+  {
+    "id": "central-library",
+    "name": "Central Library",
+    "category": "Library",
+    "description": "Central library and study facilities.",
+    "latitude": 12.751320233927213,
+    "longitude": 80.19650902922987
+  },
+  {
+    "id": "ece-seminar-hall",
+    "name": "ECE Seminar Hall",
+    "category": "Academic",
+    "description": "Electronics and Communication Engineering seminar hall.",
+    "latitude": 12.750767894150242,
+    "longitude": 80.19597437835476
+  },
+  {
+    "id": "underwater-acoustic-research-lab",
+    "name": "Underwater Acoustic Research Lab",
+    "category": "Research",
+    "description": "Underwater acoustics research laboratory.",
+    "latitude": 12.750535552338917,
+    "longitude": 80.19617478252326
+  },
+  {
+    "id": "eee-department",
+    "name": "EEE Department",
+    "category": "Academic",
+    "description": "Electrical and Electronics Engineering department.",
+    "latitude": 12.74939093159569,
+    "longitude": 80.19634824737662
+  },
+  {
+    "id": "dispensary-health-centre",
+    "name": "Dispensary (Health Centre)",
+    "category": "Healthcare",
+    "description": "Campus health centre.",
+    "latitude": 12.749221599467099,
+    "longitude": 80.19803770883102
+  },
+  {
+    "id": "snuc-academic-block-3",
+    "name": "SNUC Academic Block 3",
+    "category": "Academic",
+    "description": "Academic Block 3.",
+    "latitude": 12.75260324720876,
+    "longitude": 80.19253391148708
+  },
+  {
+    "id": "snuc-academic-block-1",
+    "name": "SNUC Academic Block 1",
+    "category": "Academic",
+    "description": "Academic Block 1.",
+    "latitude": 12.752084800275945,
+    "longitude": 80.1926747027238
+  },
+  {
+    "id": "snuc-academic-block-2",
+    "name": "SNUC Academic Block 2",
+    "category": "Academic",
+    "description": "Academic Block 2.",
+    "latitude": 12.751453471265489,
+    "longitude": 80.19269295531403
+  },
+  {
+    "id": "central-perk",
+    "name": "Central Perk",
+    "category": "Food",
+    "description": "Cafe.",
+    "latitude": 12.752792888853275,
+    "longitude": 80.19210286932739
+  },
+  {
+    "id": "nilavan-food-opc",
+    "name": "Nilavan Food OPC private limited",
+    "category": "Food",
+    "description": "Food outlet.",
+    "latitude": 12.751203029188186,
+    "longitude": 80.19728834207919
+  },
+  {
+    "id": "fresh-crush",
+    "name": "Fresh Crush",
+    "category": "Food",
+    "description": "Food and beverages.",
+    "latitude": 12.75197007311562,
+    "longitude": 80.19658122195445
+  },
+  {
+    "id": "pr-canteen-ssn",
+    "name": "PR Canteen SSN",
+    "category": "Food",
+    "description": "Campus canteen.",
+    "latitude": 12.749390792121991,
+    "longitude": 80.19700933375937
+  },
+  {
+    "id": "hcl-health-care",
+    "name": "HCL Health Care",
+    "category": "Healthcare",
+    "description": "Healthcare facility.",
+    "latitude": 12.74923246316703,
+    "longitude": 80.19769054392775
+  },
+  {
+    "id": "chemical-engineering-department",
+    "name": "Chemical Engineering Department",
+    "category": "Academic",
+    "description": "Chemical Engineering department.",
+    "latitude": 12.74958894871297,
+    "longitude": 80.19766710648315
+  },
+  {
+    "id": "workshop-block",
+    "name": "Workshop Block",
+    "category": "Academic",
+    "description": "Workshop facilities.",
+    "latitude": 12.751237474618682,
+    "longitude": 80.19364982720013
+  },
+  {
+    "id": "cam-lab-additive-manufacturing",
+    "name": "CAM Lab Additive Manufacturing",
+    "category": "Research",
+    "description": "Additive manufacturing laboratory.",
+    "latitude": 12.751876457791683,
+    "longitude": 80.19385399040823
+  },
+  {
+    "id": "ssn-annexure-block",
+    "name": "SSN Annexure Block",
+    "category": "Academic",
+    "description": "SSN Annexure Block.",
+    "latitude": 12.75204767656072,
+    "longitude": 80.19704647626862
+  }
+]
