@@ -296,3 +296,140 @@ select {
     height: 480px;
   }
 }
+
+.location-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.location-input-wrapper input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 45px 10px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: white;
+  color: #172033;
+  font: inherit;
+}
+
+.current-location-button {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #2563eb;
+  cursor: pointer;
+}
+
+.current-location-button:hover {
+  background: #eff6ff;
+}
+
+.route-field {
+  position: relative;
+}
+
+.location-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 2000;
+
+  display: flex;
+  flex-direction: column;
+
+  max-height: 300px;
+  overflow-y: auto;
+
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.location-suggestions button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+
+  color: #263238;
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+
+  cursor: pointer;
+}
+
+.location-suggestions button:hover {
+  background: #f1f5f9;
+}
+
+.suggestion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 22px;
+}
+
+.suggestion-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-suggestions:empty {
+  display: none;
+}
+.location-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.route-field input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 10px 45px 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: white;
+  color: #172033;
+  font: inherit;
+  outline: none;
+}
+
+.route-field input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #2563eb20;
+}
