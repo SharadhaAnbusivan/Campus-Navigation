@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useCallback, useRef } from "react";
 import CampusMap from "./components/CampusMap";
 import locations from "./data/locations.json";
@@ -18,6 +17,7 @@ export default function App() {
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [gettingLocation, setGettingLocation] = useState(false);
 
   // Live walking states
   const [walkDistance, setWalkDistance] = useState(0);
@@ -27,24 +27,26 @@ export default function App() {
   const [reachedDestination, setReachedDestination] = useState(false);
   const [trackingError, setTrackingError] = useState("");
   const [completedDuration, setCompletedDuration] = useState(0);
+  const [startingWalk, setStartingWalk] = useState(false);
 
   // Saved walking history
   const [savedWalks, setSavedWalks] = useState(() => {
     try {
-      return JSON.parse(
-        localStorage.getItem("campusWalks") || "[]"
-      );
+      return JSON.parse(localStorage.getItem("campusWalks") || "[]");
     } catch {
       return [];
     }
   });
 
-  // GPS references
+  // GPS and route references
   const watchIdRef = useRef(null);
   const previousPositionRef = useRef(null);
   const distanceRef = useRef(0);
   const startedAtRef = useRef(null);
   const arrivalReadingsRef = useRef(0);
+
+  // Prevent older route requests from overwriting newer routes
+  const routeRequestRef = useRef(0);
 
   const fromLocation = locations.find(
     (item) => item.id === fromId
@@ -57,9 +59,7 @@ export default function App() {
   // Calculate distance between two GPS coordinates in metres
   function calculateDistance(lat1, lon1, lat2, lon2) {
     const earthRadius = 6371000;
-
-    const toRadians = (degrees) =>
-      (degrees * Math.PI) / 180;
+    const toRadians = (degrees) => (degrees * Math.PI) / 180;
 
     const dLat = toRadians(lat2 - lat1);
     const dLon = toRadians(lon2 - lon1);
@@ -77,7 +77,7 @@ export default function App() {
     );
   }
 
-  // Format an arrival timestamp as a clock time
+  // Format arrival time
   function formatArrivalTime(minutes) {
     if (minutes === null || minutes === undefined) {
       return "Calculating...";
@@ -93,7 +93,7 @@ export default function App() {
     });
   }
 
-  // Calculate remaining distance along the planned route
+  // Calculate remaining distance along route
   function getRemainingRouteDistance(position, coordinates) {
     if (!coordinates || coordinates.length === 0) {
       return null;
@@ -140,10 +140,7 @@ export default function App() {
       watchIdRef.current !== null &&
       navigator.geolocation
     ) {
-      navigator.geolocation.clearWatch(
-        watchIdRef.current
-      );
-
+      navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
 
@@ -151,7 +148,7 @@ export default function App() {
     setIsWalking(false);
   }
 
-  // Save a walk to browser localStorage
+  // Save a walk
   function saveWalk(reason) {
     if (!startedAtRef.current) {
       return;
@@ -195,11 +192,10 @@ export default function App() {
       console.error("Unable to save walk:", error);
     }
 
-    // Prevent duplicate saves
     startedAtRef.current = null;
   }
 
-  // Get current GPS location
+  // Get current GPS location for the From field
   function useMyLocation() {
     if (!navigator.geolocation) {
       setTrackingError(
@@ -208,6 +204,16 @@ export default function App() {
       return;
     }
 
+    if (startingWalk || isWalking || gettingLocation) {
+      return;
+    }
+
+    setGettingLocation(true);
+    setTrackingError("");
+
+    // Invalidate any previous route request
+    routeRequestRef.current++;
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const coordinates = [
@@ -215,27 +221,44 @@ export default function App() {
           position.coords.longitude,
         ];
 
+        console.log("CURRENT GPS LOCATION:", coordinates);
+
+        // Update actual GPS position
         setCurrentPosition(coordinates);
+
+        // Update the From input
         setFromId("current-location");
-        setFromSearch("My current location");
+        setFromSearch("My Current Location");
+
         setTrackingError("");
+        setGettingLocation(false);
       },
       (error) => {
         console.error("Location error:", error);
 
-        setTrackingError(
-          "Unable to get your current location."
-        );
+        let message = "Unable to get your current location.";
+
+        if (error.code === 1) {
+          message =
+            "Location permission denied. Please allow location access.";
+        } else if (error.code === 2) {
+          message = "Your current GPS location is unavailable.";
+        } else if (error.code === 3) {
+          message = "Location request timed out. Please try again.";
+        }
+
+        setTrackingError(message);
+        setGettingLocation(false);
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
+        timeout: 20000,
         maximumAge: 0,
       }
     );
   }
 
-  // Search and rank campus locations
+  // Search campus locations
   function getSuggestions(query) {
     const search = query.trim().toLowerCase();
 
@@ -264,10 +287,7 @@ export default function App() {
           return null;
         }
 
-        return {
-          ...location,
-          score,
-        };
+        return { ...location, score };
       })
       .filter(Boolean)
       .sort((a, b) => b.score - a.score)
@@ -279,6 +299,8 @@ export default function App() {
 
   // Select starting location
   function selectStartingLocation(location) {
+    routeRequestRef.current++;
+
     setFromId(location.id);
     setFromSearch(location.name);
     setReachedDestination(false);
@@ -287,10 +309,12 @@ export default function App() {
 
   // Select destination
   function selectDestination(location) {
-    // Save an active walk before changing destination
+    routeRequestRef.current++;
+
     saveWalk("Destination changed");
     stopTracking();
 
+    setStartingWalk(false);
     setReachedDestination(false);
     setWalkDistance(0);
     setRemainingDistance(0);
@@ -328,9 +352,7 @@ export default function App() {
         shift += 5;
       } while (byte >= 0x20);
 
-      lat += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
+      lat += result & 1 ? ~(result >> 1) : result >> 1;
 
       result = 0;
       shift = 0;
@@ -341,9 +363,7 @@ export default function App() {
         shift += 5;
       } while (byte >= 0x20);
 
-      lon += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
+      lon += result & 1 ? ~(result >> 1) : result >> 1;
 
       coordinates.push([
         lat / factor,
@@ -354,7 +374,57 @@ export default function App() {
     return coordinates;
   }
 
-  // Find walking route automatically
+  // Get a walking route between any two coordinates
+  async function fetchWalkingRoute(fromCoordinates, toCoordinates) {
+    console.log("ROUTE START:", fromCoordinates);
+    console.log("ROUTE DESTINATION:", toCoordinates);
+
+    const response = await fetch(
+      "https://valhalla1.openstreetmap.de/route",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          locations: [
+            {
+              lat: fromCoordinates[0],
+              lon: fromCoordinates[1],
+            },
+            {
+              lat: toCoordinates[0],
+              lon: toCoordinates[1],
+            },
+          ],
+          costing: "pedestrian",
+          units: "kilometers",
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Routing service unavailable");
+    }
+
+    const data = await response.json();
+
+    if (data.error || !data.trip?.legs?.[0]?.shape) {
+      throw new Error("No walking route found");
+    }
+
+    const leg = data.trip.legs[0];
+
+    return {
+      coordinates: decodePolyline(leg.shape),
+      info: {
+        distance: leg.summary.length,
+        time: leg.summary.time,
+      },
+    };
+  }
+
+  // Preview route using selected From and To locations
   const showWalkingRoute = useCallback(async () => {
     if (!fromId || !toId || fromId === toId) {
       return;
@@ -381,64 +451,41 @@ export default function App() {
       return;
     }
 
+    // Assign this request an ID
+    const requestId = ++routeRequestRef.current;
+
     setLoading(true);
     setRouteCoordinates([]);
     setRouteInfo(null);
 
     try {
-      const response = await fetch(
-        "https://valhalla1.openstreetmap.de/route",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            locations: [
-              {
-                lat: fromCoordinates[0],
-                lon: fromCoordinates[1],
-              },
-              {
-                lat: toCoordinates[0],
-                lon: toCoordinates[1],
-              },
-            ],
-            costing: "pedestrian",
-            units: "kilometers",
-          }),
-        }
+      const route = await fetchWalkingRoute(
+        fromCoordinates,
+        toCoordinates
       );
 
-      if (!response.ok) {
-        throw new Error("Routing service unavailable");
+      // Ignore this result if a newer request has started
+      if (requestId !== routeRequestRef.current) {
+        return;
       }
 
-      const data = await response.json();
-
-      if (data.error || !data.trip?.legs?.[0]?.shape) {
-        throw new Error("No walking route found");
-      }
-
-      const leg = data.trip.legs[0];
-      const coordinates = decodePolyline(leg.shape);
-
-      setRouteCoordinates(coordinates);
-
-      setRouteInfo({
-        distance: leg.summary.length,
-        time: leg.summary.time,
-      });
-
+      setRouteCoordinates(route.coordinates);
+      setRouteInfo(route.info);
       setSelectedLocation(toLocation);
     } catch (error) {
-      console.error("Walking route error:", error);
+      if (requestId !== routeRequestRef.current) {
+        return;
+      }
+
+      console.error("Preview route error:", error);
 
       setTrackingError(
         "Unable to find a walking route. Please try again."
       );
     } finally {
-      setLoading(false);
+      if (requestId === routeRequestRef.current) {
+        setLoading(false);
+      }
     }
   }, [
     fromId,
@@ -448,22 +495,34 @@ export default function App() {
     toLocation,
   ]);
 
-  // Automatically update route when locations change
+  // Automatically update preview route when locations change
   useEffect(() => {
-    if (isWalking) {
+    if (isWalking || startingWalk || gettingLocation) {
       return;
     }
 
     if (fromId && toId && fromId !== toId) {
       showWalkingRoute();
     } else {
+      routeRequestRef.current++;
       setRouteCoordinates([]);
       setRouteInfo(null);
     }
-  }, [fromId, toId, showWalkingRoute, isWalking]);
+  }, [
+    fromId,
+    toId,
+    showWalkingRoute,
+    isWalking,
+    startingWalk,
+    gettingLocation,
+  ]);
 
-  // Start real GPS tracking
-  function startWalking() {
+  // Start walking from the ACTUAL current GPS location
+  async function startWalking() {
+    if (startingWalk || isWalking) {
+      return;
+    }
+
     if (!navigator.geolocation) {
       setTrackingError(
         "Your browser does not support GPS tracking."
@@ -471,10 +530,8 @@ export default function App() {
       return;
     }
 
-    if (!toLocation || !routeInfo) {
-      setTrackingError(
-        "Please select a destination and wait for the route."
-      );
+    if (!toLocation) {
+      setTrackingError("Please select a destination.");
       return;
     }
 
@@ -482,162 +539,291 @@ export default function App() {
       return;
     }
 
+    // Invalidate all previous route requests
+    const requestId = ++routeRequestRef.current;
+
+    // Capture the selected destination for this walk
+    const destination = {
+      ...toLocation,
+    };
+
+    setStartingWalk(true);
+    setLoading(true);
     setTrackingError("");
-    setReachedDestination(false);
-    setWalkDistance(0);
-    setRemainingDistance(routeInfo.distance * 1000);
-    setRemainingTime(routeInfo.time / 60);
-    setArrivalTime(null);
-    setCompletedDuration(0);
 
-    distanceRef.current = 0;
-    previousPositionRef.current = null;
-    arrivalReadingsRef.current = 0;
+    // Remove the old blue route immediately
+    setRouteCoordinates([]);
+    setRouteInfo(null);
 
-    startedAtRef.current = Date.now();
+    try {
+      // STEP 1: Get actual current GPS position
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          reject,
+          {
+            enableHighAccuracy: true,
+            timeout: 20000,
+            maximumAge: 0,
+          }
+        );
+      });
 
-    setIsWalking(true);
+      if (requestId !== routeRequestRef.current) {
+        return;
+      }
 
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        const latitude = position.coords.latitude;
-        const longitude = position.coords.longitude;
-        const accuracy = position.coords.accuracy;
+      const actualStartCoordinates = [
+        position.coords.latitude,
+        position.coords.longitude,
+      ];
 
-        const currentCoordinates = [
-          latitude,
-          longitude,
-        ];
+      console.log(
+        "ACTUAL GPS START:",
+        actualStartCoordinates
+      );
 
-        // Update live map position
-        setCurrentPosition(currentCoordinates);
+      console.log(
+        "SELECTED FROM (IGNORED FOR WALK):",
+        fromLocation
+      );
 
-        // Ignore inaccurate GPS readings
-        if (accuracy > 20) {
-          arrivalReadingsRef.current = 0;
-          return;
-        }
+      console.log(
+        "SELECTED DESTINATION:",
+        destination
+      );
 
-        const previous = previousPositionRef.current;
+      // Update actual GPS position
+      setCurrentPosition(actualStartCoordinates);
 
-        if (previous) {
-          const movedDistance = calculateDistance(
-            previous.latitude,
-            previous.longitude,
+      // Update the From box to show the actual GPS location
+      setFromId("current-location");
+      setFromSearch("My Current Location");
+
+      // STEP 2: Get destination coordinates
+      const destinationCoordinates = [
+        destination.latitude,
+        destination.longitude,
+      ];
+
+      // STEP 3: Calculate route from ACTUAL GPS to destination
+      const activeRoute = await fetchWalkingRoute(
+        actualStartCoordinates,
+        destinationCoordinates
+      );
+
+      if (requestId !== routeRequestRef.current) {
+        return;
+      }
+
+      const activeRouteCoordinates = activeRoute.coordinates;
+      const activeRouteInfo = activeRoute.info;
+
+      if (!activeRouteCoordinates.length) {
+        throw new Error("The routing service returned an empty route.");
+      }
+
+      console.log(
+        "NEW GPS ROUTE COORDINATES:",
+        activeRouteCoordinates
+      );
+
+      // STEP 4: Replace the old route with the new GPS route
+      setRouteCoordinates(activeRouteCoordinates);
+      setRouteInfo(activeRouteInfo);
+      setSelectedLocation(destination);
+
+      // STEP 5: Reset walking statistics
+      setWalkDistance(0);
+      setRemainingDistance(activeRouteInfo.distance * 1000);
+      setRemainingTime(activeRouteInfo.time / 60);
+      setArrivalTime(null);
+      setCompletedDuration(0);
+      setReachedDestination(false);
+
+      distanceRef.current = 0;
+
+      previousPositionRef.current = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+      };
+
+      arrivalReadingsRef.current = 0;
+      startedAtRef.current = Date.now();
+
+      // STEP 6: Start continuous GPS tracking
+      setIsWalking(true);
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (gpsPosition) => {
+          const latitude = gpsPosition.coords.latitude;
+          const longitude = gpsPosition.coords.longitude;
+          const accuracy = gpsPosition.coords.accuracy;
+
+          const currentCoordinates = [
             latitude,
-            longitude
+            longitude,
+          ];
+
+          setCurrentPosition(currentCoordinates);
+
+          // Ignore inaccurate GPS readings for calculations
+          if (accuracy > 20) {
+            arrivalReadingsRef.current = 0;
+            return;
+          }
+
+          const previous = previousPositionRef.current;
+
+          if (previous) {
+            const movedDistance = calculateDistance(
+              previous.latitude,
+              previous.longitude,
+              latitude,
+              longitude
+            );
+
+            // Ignore GPS fluctuations and unusually large jumps
+            if (
+              movedDistance >= 2 &&
+              movedDistance <= 100
+            ) {
+              distanceRef.current += movedDistance;
+              setWalkDistance(distanceRef.current);
+            }
+          }
+
+          previousPositionRef.current = {
+            latitude,
+            longitude,
+            accuracy,
+          };
+
+          // Calculate remaining distance using the NEW route
+          const remaining = getRemainingRouteDistance(
+            currentCoordinates,
+            activeRouteCoordinates
           );
 
-          // Ignore GPS fluctuations and unusually large jumps
-          if (
-            movedDistance >= 2 &&
-            movedDistance <= 100
-          ) {
-            distanceRef.current += movedDistance;
-            setWalkDistance(distanceRef.current);
+          if (remaining !== null) {
+            setRemainingDistance(remaining);
           }
-        }
 
-        previousPositionRef.current = {
-          latitude,
-          longitude,
-          accuracy,
-        };
+          // Calculate estimated walking speed
+          const elapsedSeconds =
+            (Date.now() - startedAtRef.current) / 1000;
 
-        // Calculate remaining distance along planned route
-        const remaining = getRemainingRouteDistance(
-          currentCoordinates,
-          routeCoordinates
-        );
+          const plannedSpeed =
+            (activeRouteInfo.distance * 1000) /
+            activeRouteInfo.time;
 
-        if (remaining !== null) {
-          setRemainingDistance(remaining);
-        }
+          const actualSpeed =
+            elapsedSeconds > 30 &&
+            distanceRef.current > 10
+              ? distanceRef.current / elapsedSeconds
+              : plannedSpeed;
 
-        // Calculate estimated walking speed
-        const elapsedSeconds =
-          (Date.now() - startedAtRef.current) / 1000;
+          const estimatedSpeed = Math.max(
+            actualSpeed,
+            0.5
+          );
 
-        const plannedSpeed =
-          (routeInfo.distance * 1000) /
-          routeInfo.time;
+          // Calculate remaining time and ETA
+          const minutesRemaining =
+            remaining !== null
+              ? remaining / estimatedSpeed / 60
+              : 0;
 
-        const actualSpeed =
-          elapsedSeconds > 30 &&
-          distanceRef.current > 10
-            ? distanceRef.current / elapsedSeconds
-            : plannedSpeed;
+          setRemainingTime(minutesRemaining);
+          setArrivalTime(Math.ceil(minutesRemaining));
 
-        const estimatedSpeed = Math.max(
-          actualSpeed,
-          0.5
-        );
+          // Check distance from actual destination
+          const distanceToDestination = calculateDistance(
+            latitude,
+            longitude,
+            destination.latitude,
+            destination.longitude
+          );
 
-        // Calculate remaining time
-        const minutesRemaining =
-          remaining !== null
-            ? remaining / estimatedSpeed / 60
-            : 0;
+          // Arrival detection
+          if (distanceToDestination <= 10) {
+            arrivalReadingsRef.current += 1;
+          } else {
+            arrivalReadingsRef.current = 0;
+          }
 
-        setRemainingTime(minutesRemaining);
-        setArrivalTime(Math.ceil(minutesRemaining));
+          if (arrivalReadingsRef.current >= 3) {
+            saveWalk("Reached destination");
 
-        // Check distance from actual destination
-        const distanceToDestination = calculateDistance(
-          latitude,
-          longitude,
-          toLocation.latitude,
-          toLocation.longitude
-        );
+            setReachedDestination(true);
+            setArrivalTime(0);
+            setRemainingTime(0);
+            setRemainingDistance(0);
 
-        // Require 3 consecutive accurate readings within 10 metres
-        if (distanceToDestination <= 10) {
-          arrivalReadingsRef.current += 1;
-        } else {
-          arrivalReadingsRef.current = 0;
-        }
+            stopTracking();
+          }
+        },
+        (error) => {
+          console.error("GPS tracking error:", error);
 
-        if (arrivalReadingsRef.current >= 3) {
-          saveWalk("Reached destination");
+          let message = "GPS tracking stopped.";
 
-          setReachedDestination(true);
-          setArrivalTime(0);
-          setRemainingTime(0);
-          setRemainingDistance(0);
+          if (error.code === 1) {
+            message =
+              "Location permission was denied. Please allow location access.";
+          } else if (error.code === 2) {
+            message =
+              "Your current GPS location is unavailable.";
+          } else if (error.code === 3) {
+            message = "GPS location request timed out.";
+          }
 
+          setTrackingError(message);
+          saveWalk("GPS tracking error");
           stopTracking();
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 20000,
         }
-      },
-      (error) => {
-        console.error("GPS tracking error:", error);
+      );
+    } catch (error) {
+      console.error("Unable to start walking:", error);
 
-        let message = "GPS tracking stopped.";
-
-        if (error.code === 1) {
-          message =
-            "Location permission was denied. Please allow location access.";
-        } else if (error.code === 2) {
-          message =
-            "Your current GPS location is unavailable.";
-        } else if (error.code === 3) {
-          message = "GPS location request timed out.";
-        }
-
-        setTrackingError(message);
-        stopTracking();
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 1000,
-        timeout: 20000,
+      if (error.code === 1) {
+        setTrackingError(
+          "Location permission was denied. Please allow location access."
+        );
+      } else if (error.code === 2) {
+        setTrackingError(
+          "Unable to get your current GPS location. Please try again."
+        );
+      } else if (error.code === 3) {
+        setTrackingError(
+          "GPS request timed out. Please try again."
+        );
+      } else {
+        setTrackingError(
+          error.message ||
+          "Unable to calculate a route from your current location."
+        );
       }
-    );
+
+      startedAtRef.current = null;
+      setIsWalking(false);
+    } finally {
+      if (requestId === routeRequestRef.current) {
+        setStartingWalk(false);
+        setLoading(false);
+      }
+    }
   }
 
   // End the current walk and save it
   function cancelWalking() {
     saveWalk("Ended early");
-
     stopTracking();
 
     setWalkDistance(0);
@@ -687,11 +873,14 @@ export default function App() {
 
           <div className="route-controls">
             {/* FROM INPUT */}
-            <label className="route-field">
-              From
+            <div className="route-field">
+              <label htmlFor="from-location-input">
+                From
+              </label>
 
               <div className="location-input-wrapper">
                 <input
+                  id="from-location-input"
                   type="text"
                   placeholder="Type starting location..."
                   value={fromSearch}
@@ -710,32 +899,45 @@ export default function App() {
                 <button
                   type="button"
                   className="current-location-button"
-                  onClick={useMyLocation}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    useMyLocation();
+                  }}
                   title="Use my current location"
                   aria-label="Use my current location"
+                  disabled={
+                    gettingLocation ||
+                    startingWalk ||
+                    isWalking
+                  }
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="21"
-                    height="21"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v3" />
-                    <path d="M12 19v3" />
-                    <path d="M2 12h3" />
-                    <path d="M19 12h3" />
-                  </svg>
+                  {gettingLocation ? (
+                    "..."
+                  ) : (
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="21"
+                      height="21"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M12 2v3" />
+                      <path d="M12 19v3" />
+                      <path d="M2 12h3" />
+                      <path d="M19 12h3" />
+                    </svg>
+                  )}
                 </button>
               </div>
 
               {fromSearch.trim() &&
                 !fromId &&
-                fromSearch !== "My current location" && (
+                fromSearch.toLowerCase() !== "my current location" && (
                   <div className="location-suggestions">
                     {startingSuggestions.map((location) => (
                       <button
@@ -766,14 +968,17 @@ export default function App() {
                     ))}
                   </div>
                 )}
-            </label>
+            </div>
 
             {/* TO INPUT */}
-            <label className="route-field">
-              To
+            <div className="route-field">
+              <label htmlFor="to-location-input">
+                To
+              </label>
 
               <div className="location-input-wrapper">
                 <input
+                  id="to-location-input"
                   type="text"
                   placeholder="Type destination..."
                   value={toSearch}
@@ -799,9 +1004,7 @@ export default function App() {
                     <button
                       type="button"
                       key={location.id}
-                      onClick={() =>
-                        selectDestination(location)
-                      }
+                      onClick={() => selectDestination(location)}
                     >
                       <span className="suggestion-icon">
                         <svg
@@ -824,11 +1027,13 @@ export default function App() {
                   ))}
                 </div>
               )}
-            </label>
+            </div>
 
             {loading && (
               <p className="route-loading">
-                Finding walking route...
+                {startingWalk
+                  ? "Getting your current location and calculating your route..."
+                  : "Finding walking route..."}
               </p>
             )}
 
@@ -945,8 +1150,11 @@ export default function App() {
                         type="button"
                         className="start-walking-button"
                         onClick={startWalking}
+                        disabled={startingWalk || loading}
                       >
-                        Start Walking
+                        {startingWalk
+                          ? "Calculating route..."
+                          : "Start Walking"}
                       </button>
                     </>
                   )}
