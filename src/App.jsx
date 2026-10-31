@@ -1,10 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import CampusMap from "./components/CampusMap";
 import locations from "./data/locations.json";
 import "./index.css";
 
 export default function App() {
+  const [isWalking, setIsWalking] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState(null);
 
   const [fromId, setFromId] = useState("");
@@ -109,13 +110,55 @@ export default function App() {
     setSelectedLocation(location);
   }
 
-  // Find walking route
-  async function showWalkingRoute() {
-    if (!fromId || !toId) {
-      return;
+  // Decode Valhalla route polyline
+  function decodePolyline(encoded, precision = 6) {
+    let index = 0;
+    let lat = 0;
+    let lon = 0;
+
+    const coordinates = [];
+    const factor = 10 ** precision;
+
+    while (index < encoded.length) {
+      let result = 0;
+      let shift = 0;
+      let byte;
+
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+
+      lat += result & 1
+        ? ~(result >> 1)
+        : result >> 1;
+
+      result = 0;
+      shift = 0;
+
+      do {
+        byte = encoded.charCodeAt(index++) - 63;
+        result |= (byte & 0x1f) << shift;
+        shift += 5;
+      } while (byte >= 0x20);
+
+      lon += result & 1
+        ? ~(result >> 1)
+        : result >> 1;
+
+      coordinates.push([
+        lat / factor,
+        lon / factor,
+      ]);
     }
 
-    if (fromId === toId) {
+    return coordinates;
+  }
+
+  // Find walking route automatically
+  const showWalkingRoute = useCallback(async () => {
+    if (!fromId || !toId || fromId === toId) {
       return;
     }
 
@@ -143,6 +186,7 @@ export default function App() {
     setLoading(true);
     setRouteCoordinates([]);
     setRouteInfo(null);
+    setIsWalking(false);
 
     try {
       const response = await fetch(
@@ -195,58 +239,30 @@ export default function App() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [
+    fromId,
+    toId,
+    currentPosition,
+    fromLocation,
+    toLocation,
+  ]);
 
-  // Decode Valhalla route polyline
-  function decodePolyline(encoded, precision = 6) {
-    let index = 0;
-    let lat = 0;
-    let lon = 0;
-
-    const coordinates = [];
-    const factor = 10 ** precision;
-
-    while (index < encoded.length) {
-      let result = 0;
-      let shift = 0;
-      let byte;
-
-      do {
-        byte = encoded.charCodeAt(index++) - 63;
-        result |= (byte & 0x1f) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-
-      lat += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
-
-      result = 0;
-      shift = 0;
-
-      do {
-        byte = encoded.charCodeAt(index++) - 63;
-        result |= (byte & 0x1f) << shift;
-        shift += 5;
-      } while (byte >= 0x20);
-
-      lon += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
-
-      coordinates.push([
-        lat / factor,
-        lon / factor,
-      ]);
+  // Automatically update route when both locations are selected
+  useEffect(() => {
+    if (fromId && toId && fromId !== toId) {
+      showWalkingRoute();
+    } else {
+      setRouteCoordinates([]);
+      setRouteInfo(null);
+      setIsWalking(false);
     }
-
-    return coordinates;
-  }
+  }, [fromId, toId, showWalkingRoute]);
 
   // Clear route
   function clearRoute() {
     setRouteCoordinates([]);
     setRouteInfo(null);
+    setIsWalking(false);
   }
 
   return (
@@ -265,14 +281,10 @@ export default function App() {
           <div className="section-heading">
             <div>
               <h2>Explore Campus</h2>
-              <p>Select a marker or plan a walking route.</p>
             </div>
-
-            <span>{locations.length} locations</span>
           </div>
 
           <div className="route-controls">
-
             {/* FROM INPUT */}
             <label className="route-field">
               From
@@ -366,6 +378,7 @@ export default function App() {
                     setSelectedLocation(null);
                     setRouteCoordinates([]);
                     setRouteInfo(null);
+                    setIsWalking(false);
                   }}
                 />
               </div>
@@ -403,24 +416,11 @@ export default function App() {
               )}
             </label>
 
-            {/* ROUTE BUTTONS */}
-            <div className="route-buttons">
-              <button
-                onClick={showWalkingRoute}
-                disabled={loading}
-                type="button"
-              >
-                Show Walking Route
-              </button>
-
-              <button
-                onClick={clearRoute}
-                type="button"
-              >
-                Clear Route
-              </button>
-            </div>
-
+            {loading && (
+              <p className="route-loading">
+                Finding walking route...
+              </p>
+            )}
           </div>
 
           {/* MAP */}
@@ -451,17 +451,35 @@ export default function App() {
 
               {routeInfo && (
                 <div className="route-summary">
-                  <p>
-                    <strong>Distance</strong>
-                    <br />
-                    {routeInfo.distance.toFixed(2)} km
-                  </p>
+                  {!isWalking && (
+                    <>
+                      <p>
+                        <strong>Distance</strong>
+                        <br />
+                        {routeInfo.distance.toFixed(2)} km
+                      </p>
 
-                  <p>
-                    <strong>Estimated walking time</strong>
-                    <br />
-                    {Math.ceil(routeInfo.time / 60)} min
-                  </p>
+                      <p>
+                        <strong>Estimated walking time</strong>
+                        <br />
+                        {Math.ceil(routeInfo.time / 60)} min
+                      </p>
+                    </>
+                  )}
+
+                  <button
+                    type="button"
+                    className={
+                      isWalking
+                        ? "cancel-walking-button"
+                        : "start-walking-button"
+                    }
+                    onClick={() => setIsWalking(!isWalking)}
+                  >
+                    {isWalking
+                      ? "Cancel Walking"
+                      : "Start Walking"}
+                  </button>
                 </div>
               )}
 
@@ -480,7 +498,9 @@ export default function App() {
           ) : (
             <div className="empty-state">
               <span className="empty-icon">⌖</span>
-              <p>Select a campus marker to see its details.</p>
+              <p>
+                Select a campus marker to see its details.
+              </p>
             </div>
           )}
         </aside>

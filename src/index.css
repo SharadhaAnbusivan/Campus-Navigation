@@ -1,4 +1,8 @@
 
+/* =========================
+   GLOBAL STYLES
+========================= */
+
 * {
   box-sizing: border-box;
 }
@@ -11,13 +15,22 @@ body {
 }
 
 button,
-select {
+select,
+input {
   font: inherit;
+}
+
+button {
+  cursor: pointer;
 }
 
 .app {
   min-height: 100vh;
 }
+
+/* =========================
+   TOP BAR
+========================= */
 
 .topbar {
   display: flex;
@@ -47,6 +60,10 @@ select {
   font-weight: 600;
 }
 
+/* =========================
+   MAIN LAYOUT
+========================= */
+
 .main-content {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(280px, 0.9fr);
@@ -63,6 +80,10 @@ select {
   border-radius: 20px;
   background: white;
 }
+
+/* =========================
+   SECTION HEADINGS
+========================= */
 
 .section-heading {
   display: flex;
@@ -88,6 +109,10 @@ select {
   white-space: nowrap;
 }
 
+/* =========================
+   MAP
+========================= */
+
 .map-container {
   width: 100%;
   height: 600px;
@@ -102,6 +127,10 @@ select {
   height: 100%;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* =========================
+   ROUTE CONTROLS
+========================= */
 
 .route-controls {
   display: grid;
@@ -147,7 +176,6 @@ select {
   background: #2563eb;
   color: white;
   font-weight: 600;
-  cursor: pointer;
 }
 
 .route-buttons button:disabled {
@@ -165,6 +193,132 @@ select {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+.route-loading {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* =========================
+   LOCATION INPUTS
+========================= */
+
+.route-field {
+  position: relative;
+}
+
+.location-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.route-field input {
+  display: block;
+  width: 100%;
+  height: 44px;
+  min-width: 0;
+  padding: 10px 45px 10px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: white;
+  color: #172033;
+  outline: none;
+}
+
+.route-field input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #2563eb20;
+}
+
+.current-location-button {
+  position: absolute;
+  right: 5px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #2563eb;
+}
+
+.current-location-button:hover {
+  background: #eff6ff;
+}
+
+/* =========================
+   AUTOCOMPLETE SUGGESTIONS
+========================= */
+
+.location-suggestions {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 6px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+}
+
+.location-suggestions button {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: #263238;
+  font-size: 15px;
+  font-weight: 400;
+  text-align: left;
+}
+
+.location-suggestions button:hover {
+  background: #f1f5f9;
+}
+
+.suggestion-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 22px;
+}
+
+.suggestion-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.location-suggestions:empty {
+  display: none;
+}
+
+/* =========================
+   DETAILS PANEL
+========================= */
 
 .details-panel {
   min-height: 600px;
@@ -212,6 +366,10 @@ select {
   font-size: 34px;
 }
 
+/* =========================
+   ROUTE SUMMARY
+========================= */
+
 .route-summary {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -228,11 +386,54 @@ select {
   line-height: 1.6;
 }
 
+/* =========================
+   WALKING BUTTONS
+========================= */
+
+.start-walking-button,
+.cancel-walking-button {
+  width: 100%;
+  padding: 13px;
+  margin-top: 12px;
+  border: none;
+  border-radius: 10px;
+  background: #2563eb;
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background 0.2s ease;
+}
+
+.start-walking-button:hover,
+.cancel-walking-button:hover {
+  background: #1d4ed8;
+}
+
+.start-walking-button:disabled {
+  background: #16a34a;
+  cursor: default;
+}
+
+.clear-route-button {
+  padding: 9px 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: white;
+}
+
+.clear-route-button:hover {
+  background: #f8fafc;
+}
+
+/* =========================
+   MAP MARKERS
+========================= */
+
 .destination-pin {
-  width: 28px;
-  height: 28px;
   display: grid;
   place-items: center;
+  width: 28px;
+  height: 28px;
   border: 3px solid white;
   border-radius: 50% 50% 50% 0;
   background: #2563eb;
@@ -242,10 +443,10 @@ select {
 }
 
 .current-location-pin {
-  width: 24px;
-  height: 24px;
   display: grid;
   place-items: center;
+  width: 24px;
+  height: 24px;
   border: 3px solid white;
   border-radius: 50%;
   background: #2563eb;
@@ -258,6 +459,10 @@ select {
   border-radius: 50%;
   background: white;
 }
+
+/* =========================
+   RESPONSIVE DESIGN
+========================= */
 
 @media (max-width: 900px) {
   .main-content {
@@ -295,141 +500,8 @@ select {
   .map-container {
     height: 480px;
   }
-}
 
-.location-input-wrapper {
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-}
-
-.location-input-wrapper input {
-  width: 100%;
-  min-width: 0;
-  padding: 10px 45px 10px 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: white;
-  color: #172033;
-  font: inherit;
-}
-
-.current-location-button {
-  position: absolute;
-  right: 5px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #2563eb;
-  cursor: pointer;
-}
-
-.current-location-button:hover {
-  background: #eff6ff;
-}
-
-.route-field {
-  position: relative;
-}
-
-.location-suggestions {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  right: 0;
-  z-index: 2000;
-
-  display: flex;
-  flex-direction: column;
-
-  max-height: 300px;
-  overflow-y: auto;
-
-  padding: 6px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-
-  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
-}
-
-.location-suggestions button {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-
-  width: 100%;
-  min-height: 52px;
-  padding: 10px 12px;
-
-  border: none;
-  border-radius: 9px;
-  background: transparent;
-
-  color: #263238;
-  font-size: 15px;
-  font-weight: 400;
-  text-align: left;
-
-  cursor: pointer;
-}
-
-.location-suggestions button:hover {
-  background: #f1f5f9;
-}
-
-.suggestion-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-
-  border-radius: 50%;
-  background: #f1f5f9;
-  color: #64748b;
-  font-size: 22px;
-}
-
-.suggestion-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.location-suggestions:empty {
-  display: none;
-}
-.location-input-wrapper {
-  position: relative;
-  width: 100%;
-}
-
-.route-field input {
-  display: block;
-  width: 100%;
-  height: 44px;
-  box-sizing: border-box;
-  padding: 10px 45px 10px 12px;
-  border: 1px solid #cbd5e1;
-  border-radius: 7px;
-  background: white;
-  color: #172033;
-  font: inherit;
-  outline: none;
-}
-
-.route-field input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px #2563eb20;
+  .route-summary {
+    grid-template-columns: 1fr;
+  }
 }
