@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import CampusMap from "./components/CampusMap";
 import locations from "./data/locations.json";
 import "./index.css";
@@ -19,6 +19,33 @@ export default function App() {
   const [routeInfo, setRouteInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Live walking states
+  const [walkDistance, setWalkDistance] = useState(0);
+  const [remainingDistance, setRemainingDistance] = useState(0);
+  const [remainingTime, setRemainingTime] = useState(null);
+  const [arrivalTime, setArrivalTime] = useState(null);
+  const [reachedDestination, setReachedDestination] = useState(false);
+  const [trackingError, setTrackingError] = useState("");
+  const [completedDuration, setCompletedDuration] = useState(0);
+
+  // Saved walking history
+  const [savedWalks, setSavedWalks] = useState(() => {
+    try {
+      return JSON.parse(
+        localStorage.getItem("campusWalks") || "[]"
+      );
+    } catch {
+      return [];
+    }
+  });
+
+  // GPS references
+  const watchIdRef = useRef(null);
+  const previousPositionRef = useRef(null);
+  const distanceRef = useRef(0);
+  const startedAtRef = useRef(null);
+  const arrivalReadingsRef = useRef(0);
+
   const fromLocation = locations.find(
     (item) => item.id === fromId
   );
@@ -27,9 +54,157 @@ export default function App() {
     (item) => item.id === toId
   );
 
+  // Calculate distance between two GPS coordinates in metres
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const earthRadius = 6371000;
+
+    const toRadians = (degrees) =>
+      (degrees * Math.PI) / 180;
+
+    const dLat = toRadians(lat2 - lat1);
+    const dLon = toRadians(lon2 - lon1);
+
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRadians(lat1)) *
+        Math.cos(toRadians(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+
+    return (
+      earthRadius *
+      2 *
+      Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    );
+  }
+
+  // Format an arrival timestamp as a clock time
+  function formatArrivalTime(minutes) {
+    if (minutes === null || minutes === undefined) {
+      return "Calculating...";
+    }
+
+    const arrival = new Date(
+      Date.now() + minutes * 60 * 1000
+    );
+
+    return arrival.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  // Calculate remaining distance along the planned route
+  function getRemainingRouteDistance(position, coordinates) {
+    if (!coordinates || coordinates.length === 0) {
+      return null;
+    }
+
+    let nearestIndex = 0;
+    let nearestDistance = Infinity;
+
+    coordinates.forEach((coordinate, index) => {
+      const distance = calculateDistance(
+        position[0],
+        position[1],
+        coordinate[0],
+        coordinate[1]
+      );
+
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        nearestIndex = index;
+      }
+    });
+
+    let totalRemaining = nearestDistance;
+
+    for (
+      let i = nearestIndex;
+      i < coordinates.length - 1;
+      i++
+    ) {
+      totalRemaining += calculateDistance(
+        coordinates[i][0],
+        coordinates[i][1],
+        coordinates[i + 1][0],
+        coordinates[i + 1][1]
+      );
+    }
+
+    return totalRemaining;
+  }
+
+  // Stop GPS tracking
+  function stopTracking() {
+    if (
+      watchIdRef.current !== null &&
+      navigator.geolocation
+    ) {
+      navigator.geolocation.clearWatch(
+        watchIdRef.current
+      );
+
+      watchIdRef.current = null;
+    }
+
+    previousPositionRef.current = null;
+    setIsWalking(false);
+  }
+
+  // Save a walk to browser localStorage
+  function saveWalk(reason) {
+    if (!startedAtRef.current) {
+      return;
+    }
+
+    const endedAt = Date.now();
+
+    const duration = Math.floor(
+      (endedAt - startedAtRef.current) / 1000
+    );
+
+    const walk = {
+      id: endedAt,
+      destination: toLocation?.name || "Unknown",
+      distance: Number(
+        (distanceRef.current / 1000).toFixed(3)
+      ),
+      duration,
+      startedAt: startedAtRef.current,
+      endedAt,
+      reason,
+    };
+
+    try {
+      const existingWalks = JSON.parse(
+        localStorage.getItem("campusWalks") || "[]"
+      );
+
+      const updatedWalks = [...existingWalks, walk];
+
+      localStorage.setItem(
+        "campusWalks",
+        JSON.stringify(updatedWalks)
+      );
+
+      setSavedWalks(updatedWalks);
+      setCompletedDuration(duration);
+
+      console.log("Walk saved:", walk);
+    } catch (error) {
+      console.error("Unable to save walk:", error);
+    }
+
+    // Prevent duplicate saves
+    startedAtRef.current = null;
+  }
+
   // Get current GPS location
   function useMyLocation() {
     if (!navigator.geolocation) {
+      setTrackingError(
+        "Geolocation is not supported by your browser."
+      );
       return;
     }
 
@@ -43,9 +218,14 @@ export default function App() {
         setCurrentPosition(coordinates);
         setFromId("current-location");
         setFromSearch("My current location");
+        setTrackingError("");
       },
       (error) => {
         console.error("Location error:", error);
+
+        setTrackingError(
+          "Unable to get your current location."
+        );
       },
       {
         enableHighAccuracy: true,
@@ -101,10 +281,28 @@ export default function App() {
   function selectStartingLocation(location) {
     setFromId(location.id);
     setFromSearch(location.name);
+    setReachedDestination(false);
+    setTrackingError("");
   }
 
   // Select destination
   function selectDestination(location) {
+    // Save an active walk before changing destination
+    saveWalk("Destination changed");
+    stopTracking();
+
+    setReachedDestination(false);
+    setWalkDistance(0);
+    setRemainingDistance(0);
+    setRemainingTime(null);
+    setArrivalTime(null);
+    setCompletedDuration(0);
+    setTrackingError("");
+
+    distanceRef.current = 0;
+    previousPositionRef.current = null;
+    arrivalReadingsRef.current = 0;
+
     setToId(location.id);
     setToSearch(location.name);
     setSelectedLocation(location);
@@ -186,7 +384,6 @@ export default function App() {
     setLoading(true);
     setRouteCoordinates([]);
     setRouteInfo(null);
-    setIsWalking(false);
 
     try {
       const response = await fetch(
@@ -236,6 +433,10 @@ export default function App() {
       setSelectedLocation(toLocation);
     } catch (error) {
       console.error("Walking route error:", error);
+
+      setTrackingError(
+        "Unable to find a walking route. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -247,23 +448,223 @@ export default function App() {
     toLocation,
   ]);
 
-  // Automatically update route when both locations are selected
+  // Automatically update route when locations change
   useEffect(() => {
+    if (isWalking) {
+      return;
+    }
+
     if (fromId && toId && fromId !== toId) {
       showWalkingRoute();
     } else {
       setRouteCoordinates([]);
       setRouteInfo(null);
-      setIsWalking(false);
     }
-  }, [fromId, toId, showWalkingRoute]);
+  }, [fromId, toId, showWalkingRoute, isWalking]);
 
-  // Clear route
-  function clearRoute() {
-    setRouteCoordinates([]);
-    setRouteInfo(null);
-    setIsWalking(false);
+  // Start real GPS tracking
+  function startWalking() {
+    if (!navigator.geolocation) {
+      setTrackingError(
+        "Your browser does not support GPS tracking."
+      );
+      return;
+    }
+
+    if (!toLocation || !routeInfo) {
+      setTrackingError(
+        "Please select a destination and wait for the route."
+      );
+      return;
+    }
+
+    if (watchIdRef.current !== null) {
+      return;
+    }
+
+    setTrackingError("");
+    setReachedDestination(false);
+    setWalkDistance(0);
+    setRemainingDistance(routeInfo.distance * 1000);
+    setRemainingTime(routeInfo.time / 60);
+    setArrivalTime(null);
+    setCompletedDuration(0);
+
+    distanceRef.current = 0;
+    previousPositionRef.current = null;
+    arrivalReadingsRef.current = 0;
+
+    startedAtRef.current = Date.now();
+
+    setIsWalking(true);
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const latitude = position.coords.latitude;
+        const longitude = position.coords.longitude;
+        const accuracy = position.coords.accuracy;
+
+        const currentCoordinates = [
+          latitude,
+          longitude,
+        ];
+
+        // Update live map position
+        setCurrentPosition(currentCoordinates);
+
+        // Ignore inaccurate GPS readings
+        if (accuracy > 20) {
+          arrivalReadingsRef.current = 0;
+          return;
+        }
+
+        const previous = previousPositionRef.current;
+
+        if (previous) {
+          const movedDistance = calculateDistance(
+            previous.latitude,
+            previous.longitude,
+            latitude,
+            longitude
+          );
+
+          // Ignore GPS fluctuations and unusually large jumps
+          if (
+            movedDistance >= 2 &&
+            movedDistance <= 100
+          ) {
+            distanceRef.current += movedDistance;
+            setWalkDistance(distanceRef.current);
+          }
+        }
+
+        previousPositionRef.current = {
+          latitude,
+          longitude,
+          accuracy,
+        };
+
+        // Calculate remaining distance along planned route
+        const remaining = getRemainingRouteDistance(
+          currentCoordinates,
+          routeCoordinates
+        );
+
+        if (remaining !== null) {
+          setRemainingDistance(remaining);
+        }
+
+        // Calculate estimated walking speed
+        const elapsedSeconds =
+          (Date.now() - startedAtRef.current) / 1000;
+
+        const plannedSpeed =
+          (routeInfo.distance * 1000) /
+          routeInfo.time;
+
+        const actualSpeed =
+          elapsedSeconds > 30 &&
+          distanceRef.current > 10
+            ? distanceRef.current / elapsedSeconds
+            : plannedSpeed;
+
+        const estimatedSpeed = Math.max(
+          actualSpeed,
+          0.5
+        );
+
+        // Calculate remaining time
+        const minutesRemaining =
+          remaining !== null
+            ? remaining / estimatedSpeed / 60
+            : 0;
+
+        setRemainingTime(minutesRemaining);
+        setArrivalTime(Math.ceil(minutesRemaining));
+
+        // Check distance from actual destination
+        const distanceToDestination = calculateDistance(
+          latitude,
+          longitude,
+          toLocation.latitude,
+          toLocation.longitude
+        );
+
+        // Require 3 consecutive accurate readings within 10 metres
+        if (distanceToDestination <= 10) {
+          arrivalReadingsRef.current += 1;
+        } else {
+          arrivalReadingsRef.current = 0;
+        }
+
+        if (arrivalReadingsRef.current >= 3) {
+          saveWalk("Reached destination");
+
+          setReachedDestination(true);
+          setArrivalTime(0);
+          setRemainingTime(0);
+          setRemainingDistance(0);
+
+          stopTracking();
+        }
+      },
+      (error) => {
+        console.error("GPS tracking error:", error);
+
+        let message = "GPS tracking stopped.";
+
+        if (error.code === 1) {
+          message =
+            "Location permission was denied. Please allow location access.";
+        } else if (error.code === 2) {
+          message =
+            "Your current GPS location is unavailable.";
+        } else if (error.code === 3) {
+          message = "GPS location request timed out.";
+        }
+
+        setTrackingError(message);
+        stopTracking();
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 1000,
+        timeout: 20000,
+      }
+    );
   }
+
+  // End the current walk and save it
+  function cancelWalking() {
+    saveWalk("Ended early");
+
+    stopTracking();
+
+    setWalkDistance(0);
+    setRemainingDistance(0);
+    setRemainingTime(null);
+    setArrivalTime(null);
+    setReachedDestination(false);
+    setTrackingError("");
+
+    distanceRef.current = 0;
+    previousPositionRef.current = null;
+    arrivalReadingsRef.current = 0;
+  }
+
+  // Clean up GPS tracking when leaving the page
+  useEffect(() => {
+    return () => {
+      if (
+        watchIdRef.current !== null &&
+        navigator.geolocation
+      ) {
+        navigator.geolocation.clearWatch(
+          watchIdRef.current
+        );
+      }
+    };
+  }, []);
 
   return (
     <div className="app">
@@ -296,8 +697,13 @@ export default function App() {
                   value={fromSearch}
                   autoComplete="off"
                   onChange={(event) => {
+                    if (isWalking) {
+                      cancelWalking();
+                    }
+
                     setFromSearch(event.target.value);
                     setFromId("");
+                    setTrackingError("");
                   }}
                 />
 
@@ -373,12 +779,16 @@ export default function App() {
                   value={toSearch}
                   autoComplete="off"
                   onChange={(event) => {
+                    if (isWalking) {
+                      cancelWalking();
+                    }
+
                     setToSearch(event.target.value);
                     setToId("");
                     setSelectedLocation(null);
                     setRouteCoordinates([]);
                     setRouteInfo(null);
-                    setIsWalking(false);
+                    setTrackingError("");
                   }}
                 />
               </div>
@@ -421,6 +831,12 @@ export default function App() {
                 Finding walking route...
               </p>
             )}
+
+            {trackingError && (
+              <p className="route-status">
+                {trackingError}
+              </p>
+            )}
           </div>
 
           {/* MAP */}
@@ -451,35 +867,89 @@ export default function App() {
 
               {routeInfo && (
                 <div className="route-summary">
-                  {!isWalking && (
+                  {isWalking ? (
                     <>
                       <p>
-                        <strong>Distance</strong>
+                        <strong>Total distance walked</strong>
+                        <br />
+                        {(walkDistance / 1000).toFixed(2)} km
+                      </p>
+
+                      <p>
+                        <strong>Remaining distance</strong>
+                        <br />
+                        {(remainingDistance / 1000).toFixed(2)} km
+                      </p>
+
+                      <p>
+                        <strong>Remaining time</strong>
+                        <br />
+                        {remainingTime === null
+                          ? "Calculating..."
+                          : `${Math.ceil(remainingTime)} minutes`}
+                      </p>
+
+                      <p>
+                        <strong>Estimated arrival time</strong>
+                        <br />
+                        {formatArrivalTime(remainingTime)}
+                      </p>
+
+                      <button
+                        type="button"
+                        className="cancel-walking-button"
+                        onClick={cancelWalking}
+                      >
+                        End Walk & Save
+                      </button>
+                    </>
+                  ) : reachedDestination ? (
+                    <div className="arrival-message">
+                      <strong>
+                        You've reached your destination!
+                      </strong>
+
+                      <p>Your GPS tracking has ended.</p>
+
+                      <p>
+                        Total distance walked:{" "}
+                        {(walkDistance / 1000).toFixed(2)} km
+                      </p>
+
+                      <p>
+                        Total duration:{" "}
+                        {Math.floor(completedDuration / 60)} min
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p>
+                        <strong>Total route distance</strong>
                         <br />
                         {routeInfo.distance.toFixed(2)} km
                       </p>
 
                       <p>
-                        <strong>Estimated walking time</strong>
+                        <strong>Estimated walking duration</strong>
                         <br />
-                        {Math.ceil(routeInfo.time / 60)} min
+                        {Math.ceil(routeInfo.time / 60)} minutes
                       </p>
+
+                      <p>
+                        <strong>Estimated arrival time</strong>
+                        <br />
+                        {formatArrivalTime(routeInfo.time / 60)}
+                      </p>
+
+                      <button
+                        type="button"
+                        className="start-walking-button"
+                        onClick={startWalking}
+                      >
+                        Start Walking
+                      </button>
                     </>
                   )}
-
-                  <button
-                    type="button"
-                    className={
-                      isWalking
-                        ? "cancel-walking-button"
-                        : "start-walking-button"
-                    }
-                    onClick={() => setIsWalking(!isWalking)}
-                  >
-                    {isWalking
-                      ? "Cancel Walking"
-                      : "Start Walking"}
-                  </button>
                 </div>
               )}
 
@@ -503,6 +973,13 @@ export default function App() {
               </p>
             </div>
           )}
+
+          {/* Saved walk count */}
+          <div className="saved-walk-count">
+            <p>
+              <strong>Saved walks:</strong> {savedWalks.length}
+            </p>
+          </div>
         </aside>
       </main>
     </div>

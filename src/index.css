@@ -505,3 +505,12 @@ button {
     grid-template-columns: 1fr;
   }
 }
+.arrival-message {
+  grid-column: 1 / -1;
+  color: #166534;
+  line-height: 1.6;
+}
+
+.arrival-message p {
+  margin: 8px 0 0;
+}
