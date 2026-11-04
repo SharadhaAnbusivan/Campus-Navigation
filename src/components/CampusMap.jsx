@@ -1,4 +1,3 @@
-
 import {
   MapContainer,
   TileLayer,
@@ -38,12 +37,27 @@ function FitRoute({ routeCoordinates }) {
   return null;
 }
 
+// Optional auto-follow. The marker itself updates whenever currentPosition changes.
+function FollowCurrentPosition({ currentPosition, followLocation }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (currentPosition && followLocation) {
+      map.panTo(currentPosition, { animate: true, duration: 0.5 });
+    }
+  }, [map, currentPosition, followLocation]);
+
+  return null;
+}
+
 export default function CampusMap({
-  locations,
+  locations = [],
   selectedLocation,
   routeCoordinates = [],
   currentPosition,
+  walkingCoordinates = [],
   onSelectLocation,
+  followLocation = false,
 }) {
   const center = [12.7515, 80.1950];
 
@@ -67,6 +81,27 @@ export default function CampusMap({
         attribution="&copy; OpenStreetMap contributors"
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+
+      <FollowCurrentPosition
+        currentPosition={currentPosition}
+        followLocation={followLocation}
+      />
+
+      {locations.map((location) => (
+        <Marker
+          key={location.id}
+          position={[location.latitude, location.longitude]}
+          eventHandlers={{
+            click: () => onSelectLocation?.(location),
+          }}
+        >
+          <Popup>
+            <strong>{location.name}</strong>
+            <br />
+            {location.category}
+          </Popup>
+        </Marker>
+      ))}
 
       {selectedLocation && (
         <Marker
@@ -99,13 +134,27 @@ export default function CampusMap({
           <Polyline
             positions={routeCoordinates}
             pathOptions={{
-              color: "#2563eb",
+              color: "#64748b",
               weight: 5,
-              opacity: 0.9,
+              opacity: 0.75,
+              dashArray: "8 8",
             }}
           />
           <FitRoute routeCoordinates={routeCoordinates} />
         </>
+      )}
+
+      {walkingCoordinates.length > 1 && (
+        <Polyline
+          positions={walkingCoordinates}
+          pathOptions={{
+            color: "#2563eb",
+            weight: 6,
+            opacity: 0.98,
+            lineCap: "round",
+            lineJoin: "round",
+          }}
+        />
       )}
     </MapContainer>
   );

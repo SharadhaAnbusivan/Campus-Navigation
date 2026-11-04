@@ -433,3 +433,212 @@ select {
   border-color: #2563eb;
   box-shadow: 0 0 0 2px #2563eb20;
 }
+
+
+/* WALKING TRACKER */
+
+.walking-tracker {
+  margin-bottom: 22px;
+  padding: 24px;
+  border: 1px solid #e4eee8;
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff, #f4faf6);
+  box-shadow: 0 8px 24px rgba(26, 65, 45, 0.06);
+}
+
+.tracker-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 22px;
+}
+
+.tracker-eyebrow {
+  color: #16845a;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.tracker-heading h2 {
+  margin: 6px 0;
+  color: #183b2b;
+  font-size: 22px;
+}
+
+.tracker-heading p {
+  margin: 0;
+  color: #718078;
+  font-size: 13px;
+}
+
+.tracker-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 12px;
+  border-radius: 30px;
+  background: #edf2ef;
+  color: #52645a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tracker-status.tracking {
+  background: #e4f7ed;
+  color: #13834f;
+}
+
+.tracker-status.paused {
+  background: #fff4df;
+  color: #a36b12;
+}
+
+.tracker-status.finished {
+  background: #eaf0ff;
+  color: #4265b5;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.tracker-stats {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.tracker-distance,
+.tracker-time {
+  display: flex;
+  flex-direction: column;
+  padding: 18px;
+  border-radius: 15px;
+  background: #ffffff;
+  border: 1px solid #e8efea;
+}
+
+.tracker-distance span,
+.tracker-time span {
+  color: #78867e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tracker-distance strong {
+  margin-top: 5px;
+  color: #147a4d;
+  font-size: 40px;
+  font-weight: 750;
+}
+
+.tracker-time strong {
+  margin-top: 12px;
+  color: #203b2e;
+  font-size: 25px;
+  font-weight: 700;
+}
+
+.tracker-distance small,
+.tracker-time small {
+  margin-top: 4px;
+  color: #9aa69e;
+  font-size: 11px;
+}
+
+.tracker-gps {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 15px;
+  border-radius: 13px;
+  background: #edf6f0;
+}
+
+.gps-icon {
+  font-size: 25px;
+  color: #16845a;
+}
+
+.tracker-gps div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tracker-gps strong {
+  color: #28563e;
+  font-size: 12px;
+}
+
+.tracker-gps small {
+  color: #788c7e;
+  font-size: 11px;
+}
+
+.tracker-error {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fff0ef;
+  color: #b33e37;
+  font-size: 12px;
+}
+
+.tracker-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 17px;
+}
+
+.tracker-actions button {
+  min-height: 45px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 11px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tracker-primary {
+  flex: 1;
+  background: #16845a;
+  color: #ffffff;
+}
+
+.tracker-secondary {
+  background: #edf2ef;
+  color: #40564a;
+}
+
+.tracker-complete {
+  margin-top: 14px;
+  color: #16845a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 600px) {
+  .walking-tracker {
+    padding: 18px;
+  }
+
+  .tracker-heading {
+    flex-direction: column;
+  }
+
+  .tracker-actions {
+    flex-direction: column;
+  }
+
+  .tracker-actions button {
+    width: 100%;
+  }
+}

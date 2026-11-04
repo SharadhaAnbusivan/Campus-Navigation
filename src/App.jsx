@@ -1,66 +1,129 @@
+import WalkingTracker from "./components/WalkingTracker";
+import { useState, useEffect, useRef } from "react";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 
-import { useState } from "react";
+import { auth } from "./firebase/firebase";
+import Login from "./pages/Login";
 import CampusMap from "./components/CampusMap";
 import locations from "./data/locations.json";
 import "./index.css";
 
 export default function App() {
-  const [selectedLocation, setSelectedLocation] = useState(null);
+  // Walking tracker state
+  const [walkingCoordinates, setWalkingCoordinates] = useState([]);
+  const [walkingPosition, setWalkingPosition] = useState(null);
 
+  // Independent live map location state
+  const [currentPosition, setCurrentPosition] = useState(null);
+  const [isFollowingLocation, setIsFollowingLocation] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  const locationWatchId = useRef(null);
+
+  // Firebase authentication
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Stop the independent map-location watcher on unmount.
+  useEffect(() => {
+    return () => {
+      if (locationWatchId.current !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(locationWatchId.current);
+      }
+    };
+  }, []);
+
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [fromId, setFromId] = useState("");
   const [toId, setToId] = useState("");
-
   const [fromSearch, setFromSearch] = useState("");
   const [toSearch, setToSearch] = useState("");
 
-  const [currentPosition, setCurrentPosition] = useState(null);
   const [routeCoordinates, setRouteCoordinates] = useState([]);
   const [routeInfo, setRouteInfo] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const fromLocation = locations.find(
-    (item) => item.id === fromId
-  );
+  if (authLoading) {
+    return <div>Loading Campus Trail...</div>;
+  }
 
-  const toLocation = locations.find(
-    (item) => item.id === toId
-  );
+  if (!user) {
+    return <Login />;
+  }
 
-  // Get current GPS location
+  const fromLocation = locations.find((item) => item.id === fromId);
+  const toLocation = locations.find((item) => item.id === toId);
+
+  // Start continuous location updates for the map.
   function useMyLocation() {
     if (!navigator.geolocation) {
+      setLocationError("Your browser does not support location services.");
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const coordinates = [
-          position.coords.latitude,
-          position.coords.longitude,
-        ];
+    setLocationError("");
+    setFromId("current-location");
+    setFromSearch("My current location");
+    setIsFollowingLocation(true);
 
-        setCurrentPosition(coordinates);
-        setFromId("current-location");
-        setFromSearch("My current location");
+    if (locationWatchId.current !== null) {
+      navigator.geolocation.clearWatch(locationWatchId.current);
+    }
+
+    locationWatchId.current = navigator.geolocation.watchPosition(
+      (position) => {
+        const { latitude, longitude, accuracy } = position.coords;
+
+        setCurrentPosition([latitude, longitude]);
+
+        setLocationError(
+          accuracy > 50
+            ? `Location accuracy is approximately ${Math.round(accuracy)} m.`
+            : ""
+        );
       },
       (error) => {
-        console.error("Location error:", error);
+        const messages = {
+          1: "Location permission denied. Please allow location access.",
+          2: "Your location is currently unavailable. Try moving outdoors.",
+          3: "Location request timed out. Waiting for another reading.",
+        };
+
+        setLocationError(
+          messages[error.code] || "Unable to get your location."
+        );
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
+        maximumAge: 1000,
+        timeout: 20000,
       }
     );
   }
 
-  // Search and rank campus locations
+  // Stop following on the map.
+  function stopFollowingLocation() {
+    if (locationWatchId.current !== null && navigator.geolocation) {
+      navigator.geolocation.clearWatch(locationWatchId.current);
+      locationWatchId.current = null;
+    }
+
+    setIsFollowingLocation(false);
+  }
+
+  // Search suggestions.
   function getSuggestions(query) {
     const search = query.trim().toLowerCase();
 
-    if (!search || search === "my current location") {
-      return [];
-    }
+    if (!search || search === "my current location") return [];
 
     return locations
       .map((location) => {
@@ -69,24 +132,13 @@ export default function App() {
 
         let score = 0;
 
-        if (name === search) {
-          score = 100;
-        } else if (name.startsWith(search)) {
-          score = 80;
-        } else if (
-          words.some((word) => word.startsWith(search))
-        ) {
-          score = 60;
-        } else if (name.includes(search)) {
-          score = 40;
-        } else {
-          return null;
-        }
+        if (name === search) score = 100;
+        else if (name.startsWith(search)) score = 80;
+        else if (words.some((word) => word.startsWith(search))) score = 60;
+        else if (name.includes(search)) score = 40;
+        else return null;
 
-        return {
-          ...location,
-          score,
-        };
+        return { ...location, score };
       })
       .filter(Boolean)
       .sort((a, b) => b.score - a.score)
@@ -96,26 +148,30 @@ export default function App() {
   const startingSuggestions = getSuggestions(fromSearch);
   const destinationSuggestions = getSuggestions(toSearch);
 
-  // Select starting location
   function selectStartingLocation(location) {
+    stopFollowingLocation();
+
     setFromId(location.id);
     setFromSearch(location.name);
   }
 
-  // Select destination
   function selectDestination(location) {
     setToId(location.id);
     setToSearch(location.name);
     setSelectedLocation(location);
   }
 
-  // Find walking route
+  // Request a pedestrian route from Valhalla.
   async function showWalkingRoute() {
     if (!fromId || !toId) {
+      alert(
+        "Please select both a starting location and destination from the suggestions."
+      );
       return;
     }
 
     if (fromId === toId) {
+      alert("Please choose two different locations.");
       return;
     }
 
@@ -123,26 +179,24 @@ export default function App() {
       fromId === "current-location"
         ? currentPosition
         : fromLocation
-          ? [
-              fromLocation.latitude,
-              fromLocation.longitude,
-            ]
+          ? [fromLocation.latitude, fromLocation.longitude]
           : null;
 
     const toCoordinates = toLocation
-      ? [
-          toLocation.latitude,
-          toLocation.longitude,
-        ]
+      ? [toLocation.latitude, toLocation.longitude]
       : null;
 
     if (!fromCoordinates || !toCoordinates) {
+      alert(
+        "Your current location is not available yet, or a location is missing. Please wait for GPS and try again."
+      );
       return;
     }
 
     setLoading(true);
     setRouteCoordinates([]);
     setRouteInfo(null);
+    setWalkingCoordinates([]);
 
     try {
       const response = await fetch(
@@ -170,17 +224,23 @@ export default function App() {
       );
 
       if (!response.ok) {
-        throw new Error("Routing service unavailable");
+        throw new Error(
+          `Routing service returned HTTP ${response.status}`
+        );
       }
 
       const data = await response.json();
 
       if (data.error || !data.trip?.legs?.[0]?.shape) {
-        throw new Error("No walking route found");
+        throw new Error(data.error || "No walking route found.");
       }
 
       const leg = data.trip.legs[0];
       const coordinates = decodePolyline(leg.shape);
+
+      if (!coordinates.length) {
+        throw new Error("The routing service returned an empty route.");
+      }
 
       setRouteCoordinates(coordinates);
 
@@ -192,12 +252,14 @@ export default function App() {
       setSelectedLocation(toLocation);
     } catch (error) {
       console.error("Walking route error:", error);
+
+      alert(`Could not find the walking route: ${error.message}`);
     } finally {
       setLoading(false);
     }
   }
 
-  // Decode Valhalla route polyline
+  // Decode Valhalla's encoded polyline.
   function decodePolyline(encoded, precision = 6) {
     let index = 0;
     let lat = 0;
@@ -217,9 +279,7 @@ export default function App() {
         shift += 5;
       } while (byte >= 0x20);
 
-      lat += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
+      lat += result & 1 ? ~(result >> 1) : result >> 1;
 
       result = 0;
       shift = 0;
@@ -230,9 +290,7 @@ export default function App() {
         shift += 5;
       } while (byte >= 0x20);
 
-      lon += result & 1
-        ? ~(result >> 1)
-        : result >> 1;
+      lon += result & 1 ? ~(result >> 1) : result >> 1;
 
       coordinates.push([
         lat / factor,
@@ -243,21 +301,30 @@ export default function App() {
     return coordinates;
   }
 
-  // Clear route
   function clearRoute() {
     setRouteCoordinates([]);
     setRouteInfo(null);
+    setSelectedLocation(null);
+    setWalkingCoordinates([]);
   }
+
+  const mapPosition = currentPosition;
 
   return (
     <div className="app">
       <header className="topbar">
         <div>
-          <h1>Campus Navigator</h1>
+          <h1>Campus Trail</h1>
           <p>Shiv Nadar University Chennai</p>
         </div>
 
-        <span className="status">Campus Map</span>
+        <div>
+          <span className="status">Campus Map</span>
+
+          <button type="button" onClick={() => signOut(auth)}>
+            Logout
+          </button>
+        </div>
       </header>
 
       <main className="main-content">
@@ -271,9 +338,41 @@ export default function App() {
             <span>{locations.length} locations</span>
           </div>
 
-          <div className="route-controls">
+          {/* Walking tracker */}
+          <WalkingTracker
+            routeActive={routeCoordinates.length > 0}
+            destination={toLocation || null}
+            onPositionUpdate={(position) => {
+              setWalkingPosition(position);
+              setCurrentPosition(position);
+            }}
+            onTrailUpdate={setWalkingCoordinates}
+            onTripCompleted={() => {
+              alert("🎉 Location reached! Trip completed!");
+            }}
+            onSessionFinish={(session) => {
+              console.log("Completed walking session:", session);
 
-            {/* FROM INPUT */}
+              console.log(
+                "Distance:",
+                session.distanceMeters,
+                "metres"
+              );
+
+              console.log(
+                "Duration:",
+                session.durationSeconds,
+                "seconds"
+              );
+
+              console.log(
+                "Completed by arrival:",
+                session.completedByArrival
+              );
+            }}
+          />
+
+          <div className="route-controls">
             <label className="route-field">
               From
 
@@ -307,10 +406,7 @@ export default function App() {
                     strokeLinejoin="round"
                   >
                     <circle cx="12" cy="12" r="3" />
-                    <path d="M12 2v3" />
-                    <path d="M12 19v3" />
-                    <path d="M2 12h3" />
-                    <path d="M19 12h3" />
+                    <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
                   </svg>
                 </button>
               </div>
@@ -323,24 +419,9 @@ export default function App() {
                       <button
                         type="button"
                         key={location.id}
-                        onClick={() =>
-                          selectStartingLocation(location)
-                        }
+                        onClick={() => selectStartingLocation(location)}
                       >
-                        <span className="suggestion-icon">
-                          <svg
-                            viewBox="0 0 24 24"
-                            width="20"
-                            height="20"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
-                            <circle cx="12" cy="10" r="2.5" />
-                          </svg>
-                        </span>
-
+                        <span className="suggestion-icon">⌖</span>
                         <span className="suggestion-name">
                           {location.name}
                         </span>
@@ -350,7 +431,6 @@ export default function App() {
                 )}
             </label>
 
-            {/* TO INPUT */}
             <label className="route-field">
               To
 
@@ -376,24 +456,9 @@ export default function App() {
                     <button
                       type="button"
                       key={location.id}
-                      onClick={() =>
-                        selectDestination(location)
-                      }
+                      onClick={() => selectDestination(location)}
                     >
-                      <span className="suggestion-icon">
-                        <svg
-                          viewBox="0 0 24 24"
-                          width="20"
-                          height="20"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                        >
-                          <path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z" />
-                          <circle cx="12" cy="10" r="2.5" />
-                        </svg>
-                      </span>
-
+                      <span className="suggestion-icon">⌖</span>
                       <span className="suggestion-name">
                         {location.name}
                       </span>
@@ -403,39 +468,47 @@ export default function App() {
               )}
             </label>
 
-            {/* ROUTE BUTTONS */}
             <div className="route-buttons">
               <button
                 onClick={showWalkingRoute}
                 disabled={loading}
                 type="button"
               >
-                Show Walking Route
+                {loading ? "Finding Route..." : "Show Walking Route"}
               </button>
 
-              <button
-                onClick={clearRoute}
-                type="button"
-              >
+              <button onClick={clearRoute} type="button">
                 Clear Route
               </button>
+
+              {isFollowingLocation && (
+                <button
+                  onClick={stopFollowingLocation}
+                  type="button"
+                >
+                  Stop following
+                </button>
+              )}
             </div>
 
+            {locationError && (
+              <p className="route-status">{locationError}</p>
+            )}
           </div>
 
-          {/* MAP */}
           <div className="map-container">
             <CampusMap
               locations={locations}
               selectedLocation={selectedLocation}
               onSelectLocation={setSelectedLocation}
               routeCoordinates={routeCoordinates}
-              currentPosition={currentPosition}
+              currentPosition={mapPosition}
+              walkingCoordinates={walkingCoordinates}
+              followLocation={isFollowingLocation}
             />
           </div>
         </section>
 
-        {/* LOCATION DETAILS */}
         <aside className="details-panel">
           <h2>Location Details</h2>
 
