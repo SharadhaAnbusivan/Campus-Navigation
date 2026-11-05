@@ -134,10 +134,9 @@ export default function CampusMap({
           <Polyline
             positions={routeCoordinates}
             pathOptions={{
-              color: "#64748b",
+              color: "#2563eb",
               weight: 5,
-              opacity: 0.75,
-              dashArray: "8 8",
+              opacity: 0.9,
             }}
           />
           <FitRoute routeCoordinates={routeCoordinates} />
@@ -148,9 +147,9 @@ export default function CampusMap({
         <Polyline
           positions={walkingCoordinates}
           pathOptions={{
-            color: "#2563eb",
+            color: "#16a36a",
             weight: 6,
-            opacity: 0.98,
+            opacity: 0.95,
             lineCap: "round",
             lineJoin: "round",
           }}

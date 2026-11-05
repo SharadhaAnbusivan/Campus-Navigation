@@ -1,253 +1,199 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-
-import { initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { applicationDefault, initializeApp } from "firebase-admin/app";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-
-import serviceAccount from "../ServiceAccountKey.json" with { type: "json" };
 
 dotenv.config();
 
-// Initialize Firebase Admin
-initializeApp({
-  credential: cert(serviceAccount),
-});
+// Credentials are supplied at runtime through
+// GOOGLE_APPLICATION_CREDENTIALS or the hosting environment's default identity.
+initializeApp({ credential: applicationDefault() });
 
-// Connect to Firebase services
 const db = getFirestore();
 const auth = getAuth();
-
-// Create Express server
 const app = express();
 
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-  })
-);
-
+app.use(cors({
+  origin: (process.env.FRONTEND_URL || "http://localhost:5173")
+    .split(",")
+    .map((value) => value.trim()),
+}));
 app.use(express.json({ limit: "2mb" }));
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({
-    status: "success",
-    message: "Campus Trail API is running!",
-    firebase: "initialized",
-  });
+app.get("/health", (_req, res) => {
+  res.json({ status: "success", message: "Campus Trail API is running." });
 });
 
-// Test Firestore connection
-app.get("/test-firestore", async (req, res) => {
-  try {
-    const testRef = await db.collection("connectionTests").add({
-      message: "Campus Trail Firestore connection successful!",
-      createdAt: new Date(),
-    });
-
-    res.json({
-      status: "success",
-      message: "Firestore write successful!",
-      documentId: testRef.id,
-    });
-  } catch (error) {
-    console.error("Firestore error:", error);
-
-    res.status(500).json({
-      status: "error",
-      message: "Firestore write failed.",
-    });
-  }
-});
-
-// Verify Firebase Authentication for protected routes
 async function verifyUser(req, res, next) {
   try {
-    const authorization = req.headers.authorization;
-
-    if (!authorization?.startsWith("Bearer ")) {
-      return res.status(401).json({
-        status: "error",
-        message: "Authentication required.",
-      });
+    const header = req.headers.authorization;
+    if (!header?.startsWith("Bearer ")) {
+      return res.status(401).json({ status: "error", message: "Authentication required." });
     }
-
-    const idToken = authorization.slice("Bearer ".length);
-    const decodedToken = await auth.verifyIdToken(idToken);
-
+    const decoded = await auth.verifyIdToken(header.slice(7));
     req.user = {
-      uid: decodedToken.uid,
+      uid: decoded.uid,
+      displayName: decoded.name || decoded.email?.split("@")[0] || "Campus student",
     };
-
     next();
   } catch (error) {
     console.error("Authentication error:", error.message);
-
-    return res.status(401).json({
-      status: "error",
-      message: "Invalid or expired authentication token.",
-    });
+    return res.status(401).json({ status: "error", message: "Invalid or expired login token." });
   }
 }
 
-// Calculate distance between two GPS points in metres
-function calculateDistance(pointA, pointB) {
-  const toRadians = (degrees) => (degrees * Math.PI) / 180;
+function distanceMeters(a, b) {
+  const rad = (n) => (n * Math.PI) / 180;
   const earthRadius = 6371000;
-
-  const lat1 = toRadians(pointA.latitude);
-  const lat2 = toRadians(pointB.latitude);
-  const deltaLat = toRadians(pointB.latitude - pointA.latitude);
-  const deltaLon = toRadians(pointB.longitude - pointA.longitude);
-
-  const a =
-    Math.sin(deltaLat / 2) ** 2 +
-    Math.cos(lat1) *
-      Math.cos(lat2) *
-      Math.sin(deltaLon / 2) ** 2;
-
-  return (
-    earthRadius *
-    2 *
-    Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  );
+  const dLat = rad(b.latitude - a.latitude);
+  const dLon = rad(b.longitude - a.longitude);
+  const lat1 = rad(a.latitude);
+  const lat2 = rad(b.latitude);
+  const h = Math.sin(dLat / 2) ** 2
+    + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) ** 2;
+  return 2 * earthRadius * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 }
 
-// Save a completed walking session
+// Monday-based week ID using Asia/Kolkata calendar dates, e.g. 2026-11-02.
+function getIstWeekId(date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((p) => [p.type, p.value]));
+  const utcDate = new Date(Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day)));
+  const weekday = utcDate.getUTCDay(); // Sunday = 0
+  const daysSinceMonday = (weekday + 6) % 7;
+  utcDate.setUTCDate(utcDate.getUTCDate() - daysSinceMonday);
+  return `${utcDate.getUTCFullYear()}-${String(utcDate.getUTCMonth() + 1).padStart(2, "0")}-${String(utcDate.getUTCDate()).padStart(2, "0")}`;
+}
+
 app.post("/walking-sessions", verifyUser, async (req, res) => {
   try {
-    const { startedAt, finishedAt, trail } = req.body;
+    const { requestId, trail } = req.body || {};
 
     if (
-      !Number.isSafeInteger(startedAt) ||
-      !Number.isSafeInteger(finishedAt) ||
-      !Array.isArray(trail)
+      typeof requestId !== "string" ||
+      !/^[A-Za-z0-9_-]{16,80}$/.test(requestId) ||
+      !Array.isArray(trail) ||
+      trail.length < 2 ||
+      trail.length > 10000
     ) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid walking-session data.",
-      });
+      return res.status(400).json({ status: "error", message: "Invalid walking-session data." });
     }
 
-    if (
-      finishedAt <= startedAt ||
-      finishedAt > Date.now() + 30000 ||
-      finishedAt - startedAt > 24 * 60 * 60 * 1000
-    ) {
-      return res.status(400).json({
-        status: "error",
-        message: "Invalid walking-session timestamps.",
-      });
-    }
-
-    if (trail.length < 2 || trail.length > 10000) {
-      return res.status(400).json({
-        status: "error",
-        message: "The GPS trail must contain between 2 and 10000 points.",
-      });
-    }
-
-    // Validate every GPS point
-    for (const point of trail) {
+    for (let i = 0; i < trail.length; i++) {
+      const point = trail[i];
       if (
         !point ||
         !Number.isFinite(point.latitude) ||
         !Number.isFinite(point.longitude) ||
         !Number.isSafeInteger(point.timestamp) ||
-        point.latitude < -90 ||
-        point.latitude > 90 ||
-        point.longitude < -180 ||
-        point.longitude > 180 ||
-        point.timestamp < startedAt ||
-        point.timestamp > finishedAt
+        point.latitude < -90 || point.latitude > 90 ||
+        point.longitude < -180 || point.longitude > 180
       ) {
-        return res.status(400).json({
-          status: "error",
-          message: "Invalid GPS coordinates or timestamps.",
-        });
+        return res.status(400).json({ status: "error", message: "Invalid GPS point." });
+      }
+      if (i > 0 && point.timestamp <= trail[i - 1].timestamp) {
+        return res.status(400).json({ status: "error", message: "GPS points must be chronological." });
       }
     }
 
-    // Require GPS points in chronological order.
-    for (let i = 1; i < trail.length; i++) {
-      if (trail[i].timestamp <= trail[i - 1].timestamp) {
-        return res.status(400).json({
-          status: "error",
-          message: "GPS timestamps must be strictly increasing.",
-        });
-      }
+    const startedAtMs = trail[0].timestamp;
+    const finishedAtMs = Date.now(); // Server time, not a client-supplied finish time.
+    if (
+      startedAtMs > finishedAtMs + 30000 ||
+      trail[trail.length - 1].timestamp > finishedAtMs + 30000 ||
+      finishedAtMs - startedAtMs > 24 * 60 * 60 * 1000
+    ) {
+      return res.status(400).json({ status: "error", message: "Walk duration is outside the allowed range." });
     }
 
-    let distanceMeters = 0;
-
+    let totalMeters = 0;
     for (let i = 1; i < trail.length; i++) {
       const previous = trail[i - 1];
       const current = trail[i];
+      const seconds = (current.timestamp - previous.timestamp) / 1000;
+      if (seconds <= 0 || seconds > 30) continue;
 
-      const elapsedSeconds =
-        (current.timestamp - previous.timestamp) / 1000;
-
-      // Do not count gaps where the travelled path is unknown.
-      if (elapsedSeconds > 30) {
-        continue;
-      }
-
-      const segmentDistance = calculateDistance(previous, current);
-      const speed = segmentDistance / elapsedSeconds;
-
-      // Ignore implausible GPS jumps.
-      if (speed > 3.5) {
-        continue;
-      }
-
-      // Ignore tiny movements that are likely GPS noise.
-      if (segmentDistance < 2) {
-        continue;
-      }
-
-      distanceMeters += segmentDistance;
+      const segment = distanceMeters(previous, current);
+      const speed = segment / seconds;
+      // Conservative filtering for GPS spikes and non-walking speeds.
+      if (speed > 3.5 || segment < 2) continue;
+      totalMeters += segment;
     }
 
-    if (distanceMeters <= 0) {
-      return res.status(400).json({
-        status: "error",
-        message: "No valid walking distance could be calculated.",
+    const distance = Math.round(totalMeters);
+    if (distance < 10) {
+      return res.status(400).json({ status: "error", message: "Not enough valid walking distance was recorded." });
+    }
+
+    const finishedAt = new Date(finishedAtMs);
+    const startedAt = new Date(startedAtMs);
+    const weekId = getIstWeekId(finishedAt);
+    const sessionRef = db.collection("walkingSessions").doc(`${req.user.uid}_${requestId}`);
+    const weeklyRef = db.collection("weeklyLeaderboards").doc(weekId)
+      .collection("students").doc(req.user.uid);
+
+    const result = await db.runTransaction(async (transaction) => {
+      const existing = await transaction.get(sessionRef);
+      if (existing.exists) {
+        return { duplicate: true, savedDistanceMeters: existing.get("distanceMeters") };
+      }
+
+      const weeklySnapshot = await transaction.get(weeklyRef);
+      const previousMeters = weeklySnapshot.exists
+        ? Number(weeklySnapshot.get("totalDistanceMeters") || 0)
+        : 0;
+      const previousWalks = weeklySnapshot.exists
+        ? Number(weeklySnapshot.get("totalWalks") || 0)
+        : 0;
+
+      transaction.create(sessionRef, {
+        userId: req.user.uid,
+        displayName: req.user.displayName,
+        startedAt,
+        finishedAt,
+        createdAt: FieldValue.serverTimestamp(),
+        distanceMeters: distance,
+        distanceKm: Number((distance / 1000).toFixed(3)),
+        durationSeconds: Math.max(0, Math.round((finishedAtMs - startedAtMs) / 1000)),
+        trail,
+        weekId,
+        status: "recorded",
       });
-    }
 
-    const sessionRef = await db.collection("walkingSessions").add({
-      userId: req.user.uid,
-      startedAt: new Date(startedAt),
-      finishedAt: new Date(finishedAt),
-      createdAt: new Date(),
-      distanceMeters: Math.round(distanceMeters),
-      distanceKm: Number((distanceMeters / 1000).toFixed(3)),
-      durationSeconds: Math.round((finishedAt - startedAt) / 1000),
-      status: "recorded",
+      transaction.set(weeklyRef, {
+        userId: req.user.uid,
+        displayName: req.user.displayName,
+        totalDistanceMeters: previousMeters + distance,
+        totalWalks: previousWalks + 1,
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      return { duplicate: false, savedDistanceMeters: distance };
     });
 
-    return res.status(201).json({
+    return res.status(result.duplicate ? 200 : 201).json({
       status: "success",
-      message: "Walking session saved.",
+      message: result.duplicate ? "This walk was already recorded." : "Walking session and weekly total saved.",
+      duplicate: result.duplicate,
       sessionId: sessionRef.id,
-      distanceMeters: Math.round(distanceMeters),
-      distanceKm: Number((distanceMeters / 1000).toFixed(3)),
+      distanceMeters: result.savedDistanceMeters,
+      distanceKm: Number((result.savedDistanceMeters / 1000).toFixed(3)),
+      weekId,
     });
   } catch (error) {
     console.error("Walking-session error:", error);
-
-    return res.status(500).json({
-      status: "error",
-      message: "Unable to save the walking session.",
-    });
+    return res.status(500).json({ status: "error", message: "Unable to save the walking session." });
   }
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-
+const PORT = Number(process.env.PORT || 5000);
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`Campus Trail API running on port ${PORT}`);
 });

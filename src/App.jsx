@@ -1,4 +1,7 @@
+
 import WalkingTracker from "./components/WalkingTracker";
+import Leaderboard from "./components/Leaderboard";
+
 import { useState, useEffect, useRef } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 
@@ -7,6 +10,51 @@ import Login from "./pages/Login";
 import CampusMap from "./components/CampusMap";
 import locations from "./data/locations.json";
 import "./index.css";
+
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
+
+// TEMPORARY: Expose the current Firebase user for demo testing.
+// Available only while running the Vite development server.
+if (import.meta.env.DEV) {
+  window.__campusTrailGetCurrentUser = () => auth.currentUser;
+}
+
+// Save completed walking session to the backend.
+async function saveWalkingSession(session) {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw new Error("Please log in before saving your walk.");
+  }
+
+  if (!session?.requestId || !Array.isArray(session.trail)) {
+    throw new Error("Invalid walking session data.");
+  }
+
+  const token = await currentUser.getIdToken();
+
+  const response = await fetch(`${API_URL}/walking-sessions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      requestId: session.requestId,
+      trail: session.trail,
+    }),
+  });
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      result.message || "Unable to save walking session."
+    );
+  }
+
+  return result;
+}
 
 export default function App() {
   // Walking tracker state
@@ -252,7 +300,6 @@ export default function App() {
       setSelectedLocation(toLocation);
     } catch (error) {
       console.error("Walking route error:", error);
-
       alert(`Could not find the walking route: ${error.message}`);
     } finally {
       setLoading(false);
@@ -350,7 +397,7 @@ export default function App() {
             onTripCompleted={() => {
               alert("🎉 Location reached! Trip completed!");
             }}
-            onSessionFinish={(session) => {
+            onSessionFinish={async (session) => {
               console.log("Completed walking session:", session);
 
               console.log(
@@ -369,6 +416,19 @@ export default function App() {
                 "Completed by arrival:",
                 session.completedByArrival
               );
+
+              try {
+                const result = await saveWalkingSession(session);
+
+                console.log("Walking session saved:", result);
+
+                alert(
+                  `Walk saved successfully!\nDistance: ${result.distanceKm} km`
+                );
+              } catch (error) {
+                console.error("Failed to save walking session:", error);
+                alert(`Could not save your walk: ${error.message}`);
+              }
             }}
           />
 
@@ -558,6 +618,9 @@ export default function App() {
           )}
         </aside>
       </main>
+
+      {/* Live weekly leaderboard */}
+      <Leaderboard />
     </div>
   );
 }

@@ -1,0 +1,15 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: campus-trail-backend
+    ports:
+      - "5000:5000"
+    environment:
+      PORT: 5000
+      FRONTEND_URL: http://localhost:5173,http://localhost:5174,
+      GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/firebase-key.json
+    volumes:
+      - ./backend/ServiceAccountKey.json:/run/secrets/firebase-key.json:ro
+    restart: unless-stopped

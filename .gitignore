@@ -1,33 +1,18 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Dependencies
 node_modules/
-
-# Build files
 dist/
-dist-ssr/
-
-# Environment variables
 .env
 .env.*
 !.env.example
-
-# Firebase credentials and private configuration
-ServiceAccountKey.json
-*-firebase-adminsdk-*.json
-src/firebase/firebase.js
-
-# Other private keys
-*.pem
-*.key
-
-# Editor files
-.vscode/
-.idea/
+*.log
 .DS_Store
+serviceAccountKey.json
+firebase-service-account.json
+backend/secrets/
+
+# Local backup files
+*.zip
+Campus-Navigation/
+
+# Firebase Admin credentials
+backend/ServiceAccountKey.json
+backend/serviceAccountKey.json

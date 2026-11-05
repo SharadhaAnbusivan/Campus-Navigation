@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 
 const toRadians = (degrees) => (degrees * Math.PI) / 180;
@@ -61,6 +62,8 @@ export default function WalkingTracker({
   const activeSeconds = useRef(0);
   const activePeriodStartedAt = useRef(null);
 
+  const requestId = useRef(null);
+
   const movementDetected = useRef(false);
   const arrivalReadings = useRef(0);
   const completedRef = useRef(false);
@@ -117,6 +120,8 @@ export default function WalkingTracker({
     activeSeconds.current = 0;
     activePeriodStartedAt.current = null;
 
+    requestId.current = null;
+
     movementDetected.current = false;
     arrivalReadings.current = 0;
     completedRef.current = false;
@@ -157,6 +162,7 @@ export default function WalkingTracker({
     completedRef.current = true;
 
     const session = {
+      requestId: requestId.current,
       startedAt: startedAt.current,
       finishedAt,
       distanceMeters: distanceRef.current,
@@ -193,16 +199,13 @@ export default function WalkingTracker({
 
         setGpsAccuracy(accuracy);
 
-        // Update the map marker even when accuracy is poor.
         callbacksRef.current.onPositionUpdate?.([
           latitude,
           longitude,
         ]);
 
-        // Ignore extremely inaccurate GPS readings.
         if (accuracy > 75) return;
 
-        // Check destination arrival after movement has started.
         const currentDestination = destinationRef.current;
 
         if (
@@ -228,7 +231,6 @@ export default function WalkingTracker({
           }
         }
 
-        // Establish the initial GPS position.
         if (!movementDetected.current) {
           if (!baselinePosition.current) {
             baselinePosition.current = point;
@@ -241,12 +243,17 @@ export default function WalkingTracker({
             point
           );
 
-          // Wait until at least 3 metres of movement is detected.
           if (movement < 3) return;
 
           movementDetected.current = true;
 
-          startedAt.current = Date.now();
+          // Use the baseline timestamp so the first trail point
+          // is not earlier than the session start.
+          startedAt.current = baselinePosition.current.timestamp;
+
+          // One ID per walk, retained until the next reset.
+          requestId.current = crypto.randomUUID();
+
           activePeriodStartedAt.current = Date.now();
 
           changeStatus("tracking");
@@ -285,7 +292,6 @@ export default function WalkingTracker({
               ? segmentDistance / elapsedSeconds
               : Infinity;
 
-          // Reject implausible GPS jumps.
           if (
             elapsedSeconds <= 0 ||
             elapsedSeconds > 45 ||
@@ -295,7 +301,6 @@ export default function WalkingTracker({
             return;
           }
 
-          // Ignore very small GPS fluctuations.
           if (segmentDistance < 1.5) {
             return;
           }
@@ -365,7 +370,6 @@ export default function WalkingTracker({
     startGPS();
   }
 
-  // Automatically monitor GPS when a route is available.
   useEffect(() => {
     if (!routeActive) {
       if (
@@ -390,7 +394,6 @@ export default function WalkingTracker({
     };
   }, [routeActive]);
 
-  // Update the timer every second.
   useEffect(() => {
     if (status !== "tracking") return;
 
@@ -410,7 +413,6 @@ export default function WalkingTracker({
     return () => clearInterval(timer);
   }, [status]);
 
-  // Stop GPS when the component unmounts.
   useEffect(() => {
     return () => stopGPS();
   }, []);

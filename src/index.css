@@ -642,3 +642,68 @@ select {
     width: 100%;
   }
 }
+
+
+.leaderboard-card {
+  background: white;
+  border-radius: 14px;
+  padding: 20px;
+  margin: 20px 0;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+}
+
+.leaderboard-heading h2 {
+  margin: 0;
+  font-size: 21px;
+}
+
+.leaderboard-heading p {
+  color: #777;
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.leaderboard-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px;
+  border-radius: 10px;
+  background: #f7f8fa;
+}
+
+.leaderboard-row.current-user {
+  background: #e8f1ff;
+  border: 1px solid #9bbfff;
+}
+
+.leaderboard-rank {
+  min-width: 35px;
+  font-size: 20px;
+}
+
+.leaderboard-student {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.leaderboard-student small {
+  color: #777;
+}
+
+.leaderboard-distance {
+  white-space: nowrap;
+}
+
+.leaderboard-error {
+  color: #d32f2f;
+}
